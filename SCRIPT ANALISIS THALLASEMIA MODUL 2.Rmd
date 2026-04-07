@@ -1,0 +1,403 @@
+---
+title: "Pengaruh Diagnosis dan Frekuensi Transfusi Darah terhadap Kesehatan Mental dan Fisik Pasien Thalassemia dengan Pendekatan MANOVA dan MANCOVA"
+author: "Aprilia Safna Anggraeni (24031554003), Khairun Nisa' (24031554043), & Naufal Muzaki (24031554061)"
+date: "2026-03-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+getwd()
+```
+
+# **PENDAHULUAN**
+Thalassemia merupakan penyakit keturunan atau kelainan genetik yang diakibatkan oleh kelainan sel darah merah, penyakit Thalassemia ini mengharuskan penderita melakukan transfusi darah sepanjang hidupnya. Thalassemia merupakan salah satu penyakit yang memiliki jenis dan frekuensi terbanyak di dunia yang ditunjukkan oleh Data World bank. Berdasarkan Data World Bank, data menunjukkan bahwa 7% dari seluruh populasi dunia merupakan pembawa sifat Thalassemia. 
+
+# **PENJELASAN DATASET**
+Dataset yang digunakan dalam analisis ini merupakan dataset berjudul **"Health-Related Quality of Life Among Thalassemia Patients in Bangladesh using the SF-36 Questionnaire"** yang bersumber dari Mendeley Data serta dapat diakses melalui tautan berikut: https://data.mendeley.com/datasets/7c2zd56mzd/1
+
+Dataset Health-Related Quality of Life Among Thalassemia Patients in Bangladesh berisi data mengenai pasien Thalassemia yang digunakan untuk melakukan analisis terhadap kualitas hidup dan faktor-faktor yang mempengaruhinya, seperti kondisi sosial ekonomi pasien, kondisi kesehatan pasien dalam bentuk fisik maupun mental. Data ini berukuran 31 kolom dam 356 baris. Dalam analisis ini, pencarian hubungan varabel dependen yakni nilai mental pasien (Mental_Health_Summary) dan nilai fisik pasien (Physical_Health_Summary) pada variabel independen difokuskan pada variabel independen yang berada pada faktor kesehatan. Sehingga faktor-faktor sosial-ekonomi pada data akan otomatis tereliminasi.
+
+# **PERSIAPAN DATA**
+## Memuat Library
+```{r}
+library(ggplot2)
+library(dplyr)
+library(psych)
+library(car)
+library(moments)
+library(tidyr)
+library(MVN)
+library(heplots)
+library(rcompanion)
+library(lsr)
+```
+
+## Memuat Data
+```{r}
+data <- read.csv("Thalassemia_QOL.csv", stringsAsFactors = TRUE)
+```
+Saat melakukan pemuatan data terdapat tambahan parameter yang digunakan yakni `stringAsFactors=TRUE`, penambahan parameter tersebut digunakan untuk mengubah variabel dengan jenis data kategorik menjadi tipe data Factor yang digunakan untuk mendefinisikan variabel kategorik beserta dengan levelnya secara sistematis. 
+# === ANALISIS DESKRIPTIF ===
+# Cek Missing Value
+```{r}
+colSums(is.na(data))
+```
+Berdasarkan pengecekan missing value, ditemukan bahwa seluruh variabel utama yang akan digunakan dalam analisis ini memiliki data yang lengkap.
+
+# Cek Frekuensi Variabel Numerik
+```{r}
+num_var <- c("Mental_Health_Summary", "Physical_Health_Summary", 
+             "General_Health", "Physical_Functioning", "Role_Physical", 
+             "Vitality", "Mental_Health", "Bodily_Pain")
+univariate_numeric <- data %>%
+  select(all_of(num_var)) %>%
+  summarise(across(everything(), list(
+    Mean = ~mean(. , na.rm = TRUE),
+    SD = ~sd(. , na.rm = TRUE),
+    Skewness = ~moments::skewness(. , na.rm = TRUE)
+  ))) %>%
+  pivot_longer(everything(), 
+               names_to = c("Variable", ".value"), 
+               names_pattern = "(.*)_(Mean|SD|Skewness)")
+print(univariate_numeric)
+```
+Berdasarkan hasil pemeriksaan frekuensi variabel numerik, ditemukan bahwa rata-rata skor kesehatan fisik yang ditunjukkan oleh Mean sebesar 64.5 lebih tinggi dibandingkan dengan skor kesehatan mental yang ditunjukkan oleh nilai Mean sebesar 57.9. Hal ini menunjukkan bahwa beban psikologis pada pasien Thalassemia di Bangladesh lebih beras dibandingkan oleh keterbatasan disik mereka. 
+
+Hasil nilai skewness pada keseluruhan variabel menunjukkan distribusi yang lebih conong ke kiri ditunjukkan oleh nilai skewness yang negatif dengan variabel Physical Functioning yang menunjukkan kemiringan paling tajam dengan nilai skewness -1.07 ini menunjukkan bahwa adanya variasi ekstrem pada kemampuan fisik dasar pasien Thalassemia di Bangladesh.
+
+# Cek Frekuensi Variabel Kategorik
+```{r}
+cat_var <- c("Gender", "Diagnosis", "Transfusion_Status", "Frequency_of_Blood_Transfusion",
+             "Splenectomy_Status", "Comorbidities_Status", "Ironchelating_Therapy_Status")
+lapply(data[cat_var], function(x) {
+  tab <- table(x)
+  prop <- prop.table(tab) * 100
+  cbind(Frekuensi = tab, Persentase = round(prop, 2))
+})
+```
+Berdasarkan hasil pemeriksaan frekuensi variabel kategorik, ditemukan bahwa distribusi responden berdasarkan jenis kelamin (gender) menunjukkan bahwa responden didominasi oleh laki-laki sebanyak 193 orang (54.21%) sementara itu responden perempuan sebanyak 163 orang (45.79%). Dari segi diagnosis, sebagian besar responden terdiagnosis menderita E-beta-thalassaemia yang ditunjukkan oleh persentase sebesar 67.98%, diikuti dengan beta thalassemia major sebesar (29.49%), sementara untuk diagnosis penyakit lainnya sangat kecil proporsinya. Pada variabel transfusi menunjukkan bahwa hampir seluruh responden bergantung pada transfusion dependent yang ditunjukkan oleh persentase sebesar 90.73% dengan frekuensi transfusi ditunjukkan oleh kategori rendah (43.82%) dan kategori tinggi (33.15%).
+
+Mayoritas responden tidak menjalani splenektomi (70.22%) dan tidak memiliki komorbiditas (73.88%) meskipun terdapat beberapa pasien yang mengidap Hepatitis B atau C sebanyak 12.36%. Dilihat dari aspek terapi menunjukkan bahwa hampir seluruh responden memiliki kepatuhan yang baik terhadap terapi kelas besi (94.66%).
+
+Secara keseluruhan, dapat disimpulkan bahwa mayoritas pasien di Bangladesh merupakan penderita Thalassmiea yang bergantung pada transfusi dengan kondisi komorbid yang relatif rendah serta tingkat kepatuhan terapi yang tinggi.
+# Visualisasi Histrogram
+# 1. Histogram untuk Cek Skewness Fitur Mental Health Summary
+```{r}
+p1 <- ggplot(data, aes(x = Mental_Health_Summary)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "skyblue", color = "white") +
+  geom_density(alpha = .2, fill = "blue") +
+  labs(title = "Distribusi Mental Health Summary", 
+       subtitle = paste("Skewness:", round(skewness(data$Mental_Health_Summary), 2))) +
+  theme_minimal()
+print(p1)
+```
+Secara keseluruhan hasil visualisasi histogram yang telah disusun pada variabel dependen Mental_Health_Summary memiliki arah kemiringan ke arah kiri atau negatice skew, namun tidak terlalu miring. 
+
+Berdasarkan hasil visualisasi yang ada terlihat bahwa mayoritas pasien thalasemia memiliki nilai kesehatan mental yang baik yakni diangka 60, namun terdapat beberapa pasien yang memiliki nilai kesehatan mental yang sangat rendah. Jika diinterpretasikan dalam kondisi kehidupan nyata hal ini merupakan kondisi data yang realistis dikarenakan kondisi mental pasien berbeda-beda dan di pengaruhi oleh faktor-faktor sosial-ekonomi dan kesehatannya lainnya, sehingga variasi dalam kesehatan mental pasien Thalasemia dinilai normal.
+
+# 2. Histogram untuk Cek Skewness Fitur Physical Health Summary
+```{r}
+p2 <- ggplot(data, aes(x = Physical_Health_Summary)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "salmon", color = "white") +
+  geom_density(alpha = .2, fill = "red") +
+  labs(title = "Distribusi Physical Health Summary", 
+       subtitle = paste("Skewness:", round(skewness(data$Physical_Health_Summary), 2))) +
+  theme_minimal()
+print(p2)
+```
+Secara visualisasi objektif pada hasil visualisasi histogram tersebut dapat disimpulkan bahwa data Physical_Health_Summary merupakan data yang miring ke kiri atau negative skew secara jelas.
+
+Berdasarkan hasil visualisasi tersebut terlihat bahwa puncak terdapat pada sekiranya angka 60 dan sekiranya angka 80. Hal ini menjelaskan bahwa sebagai besar pasien thalasemia merasa bahwa kondisi kesehatan mereka baik-baik saja. Namun terdapat ekor kiri pada visualisasi ini yang cukup untuk menjelaskan bahwa juga terdapat beberapa pasien thalasemia yang merasa bahwa kondisi kesehatan mereka buruk, hal ini mungkin saja dialami oleh pasien thalasemia yang dengan diagnosis parah dan juga penyakit bawaan lainnya yang mendukung kondisi fisik untuk melemah.
+
+# Visualisasi QQ Plot
+```{r}
+par(mfrow=c(1,2))
+
+qqnorm(data$Mental_Health_Summary, main = "QQ Plot: Mental Health")
+qqline(data$Mental_Health_Summary, col = "red")
+
+qqnorm(data$Physical_Health_Summary, main = "QQ Plot: Physical Health")
+qqline(data$Physical_Health_Summary, col = "red")
+
+par(mfrow=c(1,1))
+```
+Berdasarkan hasil visualisasi QQ plot pada Mental_Health_Summary terlihat bahwa sebaran data cukup mengikuti garis diagonal merah meski pada ujung data terdapat beberapa data yang tidak mengikuti garis tersebut, namun sebaran data yang melenceng tetap menyebar tidak jauh dari garis diagonal. Hal ini mengartikan bahwa variabel Mental_Health_Summary memiliki distribusi normal, dan hal ini juga didukung dengan nilai skewness sebelumnya yang memiliki nilai kemiringan kiri -0.38 yang masih dalam cungkupan cukup simetris.
+
+Sedangkan, pada hasil visualisasi QQ plot untuk Physical_Health_Summary terlihat bahwa bagian tengah sebaran data masih mengikuti garis diagonal namun pada bagian ekor atau  sebaran data di ujung garis arah sebaran datanya menurun ke bawah garis diagonal. Hal ini mengartikan bahwa variabel Physical_Health_Summary memiliki distribusi data yang miring, yang juga sesuai dengan hasil histogram yang memperlihatkan kemiringan data ke arah kiri. Meskipun dinilai sebagai variabel dengan distribusi yang miring, variabel Physical_Health_Summary ini tidak memiliki distribusi kemiringan yang terlalu parah sehingga tidak akan berpengaruh pada analisis.
+
+# Deteksi Outlier
+# 1. Box Plot
+```{r}
+boxplot(data$Mental_Health_Summary, data$Physical_Health_Summary,
+        names = c("Mental Health", "Physical Health"),
+        main = "Deteksi Outlier Kualitas Hidup",
+        col = c("skyblue", "salmon"),
+        horizontal = TRUE)
+```
+Hasil visualisasi box plot untuk masing-masing variabel dependen tidak memiliki perbedaan yang siginifikan, keduanya memiliki outlier pada di titik yang sama yakni nilai 0. Namun analisis akan tetap dilakukan dengan kondisi data asli tanpa dilakukan modifikasi untuk menjelaskan kondisi realita yang diderita oleh pasien.
+
+# 2. Deteksi Outlier dengan IQR
+```{r}
+find_outliers_iqr <- function(x) {
+  q1 <- quantile(x, 0.25, na.rm = TRUE)
+  q3 <- quantile(x, 0.75, na.rm = TRUE)
+  iqr <- q3 - q1
+  lower_bound <- q1 - 1.5 * iqr
+  upper_bound <- q3 + 1.5 * iqr
+  return(x < lower_bound | x > upper_bound)
+}
+outlier_summary <- sapply(data[num_var], function(x) sum(find_outliers_iqr(x), na.rm = TRUE))
+print("Jumlah Outlier Berdasarkan Metode IQR:")
+print(outlier_summary)
+# Dikarenakan Physical_Function mempunyai banyak Outlier maka TERELIMINASI
+```
+Berdasarkan hasil pengecekan outlier dengan menerapkan metode IQR, ditemukan bahwa variabel Physical Functioning memiliki jumlah outlier yang cukup tinggi yaitu sebyak 12 data. Jumlah outlier tersebut jauh lebih besar jika dibandingkan dengan variabel lainnya. Oleh karena itu, variabel Physical Functioning dieliminiasi dari proses analisis lebih lanjut. Tujuan dari eliminasi variabel Physical Functioning adalah untuk menjaga kualitas data serta menghindari bias yang dapat ditimbulkan oleh banyaknya jumlah outlier pada variabel tersebut.
+
+# === PEMILIHAN VARIABEL INDEPENDEN
+# ETA squared
+```{r}
+screening_results <- data.frame()
+
+for (iv in cat_var) {
+  fit_m <- lm(as.formula(paste("Mental_Health_Summary ~", iv)), data = data)
+  fit_p <- lm(as.formula(paste("Physical_Health_Summary ~", iv)), data = data)
+  
+  eta_m <- etaSquared(fit_m)[1,1]
+  eta_p <- etaSquared(fit_p)[1,1]
+  
+  screening_results <- rbind(screening_results, 
+                             data.frame(Variable = iv, 
+                                        Mental_Eta = eta_m, 
+                                        Physical_Eta = eta_p))
+}
+
+screening_results$Avg_Impact <- (screening_results$Mental_Eta + screening_results$Physical_Eta) / 2
+print(screening_results[order(-screening_results$Avg_Impact), ])
+#Berdasarkan hasil Screening Statistik ETA Squared Variabel yang digunakan sebagai IV adalah:
+# Comorbidities_Status, Diagnosis, Frequency_of_Blood_Transfusion
+```
+Berdasarkan hasil pemilihan variabel independen dengan menggunakan nilai Eta Squared untuk mengukur besarnya pengaruh masing-masing variabel terhadap variabel dependen. Berdasarkan hasil perhitungan, ditemukan bahwa Variabel Comorbidities Status memiliki nilai pengaruh terbesar yang ditunjukkan oleh nilai Avg_Impact sebesar 0.0567 serta variabel diagnosis dengan nilai Avg_impact sebesr 0.0138 dan variabel Frequency of Blood Transfusion sebesar 0.0107. 
+Maka, variabel Comorbidities Status, Diagnosis, dan Frequency of Blood Transfusipon digunakan sebagai variabel independen (IV) dalam analisis lanjutan Manova dan Mancova. 
+
+# === PEMILIHAN VARIABEL KOVARIAT ===
+# Uji Korelasi Pearson untuk Kovariat (Vitality paling TINGGI)
+```{r}
+num_list <- data[, c("General_Health",
+                     "Physical_Functioning", "Role_Physical", 
+                     "Bodily_Pain", "Vitality", "Mental_Health",
+                     "Mental_Health_Summary", "Physical_Health_Summary")]
+cor_result <- cor(num_list, use="complete.obs")
+print(cor_result)
+# Vitality Nilainya paling Tinggi
+```
+Selanjutnya, dilakukan pemilihan variabel kovariat dengan menggunakan hasil analisis korelasi antar variabel numerik untuk melihat kekuatan hubungan dengan variabel dependen yaitu mental health dan physical health summary. Hasil Matriks korelasi menunjukkan bahwa variabel Vitality menunjukkan hubungan yang relatif kuat dengan kedua variabel. Meskipun terdapat ebberapa variabel lain yang juga memiliki korelasi tinggi dengan variabel dependenm akan tetapi variabel-variabel tersebut juga memiliki hubungan yang sangat kuat dengan variabel dependen sehingga dapat berpotensi menimbulkan multikolinearitas dan redundansi dalam model.
+Oleh karena itu, Variabel Vitality dipilih sebagai variabel kovariat karena mampu merepresentasikan variasi kondisi kesehatan dengan baik, memiliki korelasi yang cukup kuat dengan variabel dependen, serta relatif stabil dibandingkan variabel lainnya.
+
+# Uji independensi Kovariat pada Var. Independen
+```{r}
+anova_diag <- aov(Vitality ~ Diagnosis, data = data)
+cat("p-value Vitality & Diagnosis:", summary(anova_diag)[[1]][["Pr(>F)"]][1],"\n")
+```
+Hasil uji independensi kovariat terhadap variabel Independen menunjukkan bahwa tidak terdapat hubungan yang signifikan antara variabel Vitality dan Diagnosis yang ditunjukkan oleh nilai p-value sebesar 0.565.
+
+```{r}
+anova_freq <- aov(Vitality ~ Frequency_of_Blood_Transfusion, data = data)
+cat("p-value Vitality & Frequency of Blood Transfusion:", summary(anova_freq)[[1]][["Pr(>F)"]][1],"\n")
+```
+Hasil uji independensi kovariat terhadap variabel Independen menunjukkan bahwa tidak terdapat hubungan yang signifikan antara variabel Vitality dan Frequency of Blood Transfusion yang ditunjukkan oleh nilai p-value sebesar 0.709.
+
+
+```{r}
+anova_comor <- aov(Vitality ~ Comorbidities_Status, data = data)
+cat("p-value Vitality & Comorbidities Status:", summary(anova_comor)[[1]][["Pr(>F)"]][1],"\n")
+```
+Hasil uji independensi kovariat terhadap oleh variabel Vitality dan variabel Comorbidities Status menunjukkan nilai p-value sebesar 0.019 yang menunjukkan bahwa terdapat hubungan yang signifikan antara kovariat dan variabel independen tersbut. Namun, variabel Vitality tetap digunakan dalam analisis lanjutan dengan memastikan bahwa hasil analisis diinterpretasikan dengan hati-hati karena terdaoat potensi pengaruh dari variabel Comorbidities Status terhadap kovariat.
+
+
+# === UJI ASUMSI ===
+# 1. Uji Normalitas Multivariat Y (Gagal, nanti argumentasinya pakai hasil QQ Plot)
+```{r}
+mvn(data[, c("Mental_Health_Summary", "Physical_Health_Summary")],
+    mvn_test = "mardia")
+```
+Hasil uji normalitas terhadap variabel Mental Heatlh Summary dan Physical Health Summary yang dilakukan dengan menggunakan uji Mardia menunjukkan bahwa hasil asumsi nromalitas multivariat tidak terpenuhi yang ditunjukkan oleh nilai p-value pada Mardia Skewness < 0.001 yang signifikan. Selain iyu, uji normalitas univariat dengan menggunakan Anderson Darling juga menunjukkan bahwa kedua variabel dependen tidak berdistribusi normal, tetapi hasil visualisasi grafik dengan QQ Plot menunjukkan bahwa distribusi data cenderung mengikuti garis diagonal serta tidak mengalami penyimpangan yang ekstrem. Maka, asumsi normalitas masih ditoleransi dengan mengingat ukuran sampel yang cukup besar sekitar 356 data, serta analisis lanjutan Manova dan Mancova akan tetap dilakukan dengan mengacu pada pendekatan robust terhadap pelanggaran normalitas
+
+# 2. Uji Hoomogenitas Varians-Kovarians (Box M Tes) (Berhasil, hasil p-value lebih tiggi)
+```{r}
+boxM(data[, c("Mental_Health_Summary", "Physical_Health_Summary")],
+     data$Comorbidities_Status)
+```
+Hasil uji homogenitas matrisk varians-kovarians yang dilakukan menggunakan Box's M test dengan tujuan untuk memastikan kesamaan matriks kovarians antar kelompok pada variabel independen ini menunjukkan hasil yaitu, nilai Chi-Square sebesar 13.2165 dengan nilai p-value sebesar 0.3535. Hasil tersebut menunjukkan bahwa tidak terdapat perbedaan yang signifikan terhadap matriks varians-kovarians antar kelompok Comorbidities Status. Hasil tersebut berhasil memenuhi asumsi homogenistas varians-kovarians, sehingga analisis lanjutan dapat dilakukan.
+
+```{r}
+by(data[, c("Mental_Health_Summary", "Physical_Health_Summary")],
+   data$Comorbidities_Status,
+   cor)
+```
+Pemeriksaan lanjutan yang dilakukan dengan melihat pola hubungan antar variabel independen pada masing-masing kelompok Comorbidities Status. Hasil menunjukkan bahwa terdapat korelasi positif yang cukup kuat dan konsisten pada tiap kelompok yang ditunjukkan oleh nilai sekitar 0.67 hingga 0.87. Nilai tersebut menunjukkan bahwa hubungan antara kedua variabel dependen relatif sama pada setiap kelompok, sehingga dapat mendukung asumsi kesamaan struktur varians-kovarians yang telah diuji menggunakan Box's M Test dan dapat dilanjutkan untuk model analisis lebih lanjut.
+
+# 3. Uji Homogenitas Varians dengan Levene's Test
+# - Mental Health Summary
+```{r}
+# a) Comorbidities Status
+print("Nilai Comordibities Status - Mental Health Summary Levene's Test:")
+leveneTest(Mental_Health_Summary ~ Comorbidities_Status, data = data)
+```
+Berdasarkan hasil uji Lavene's, diperoleh nilai p-value sebesar 0.393. Nilai p-value yang lebih dari 0.05 menunjukkan bahwa tidak terdapat perbedaan varians yang signifikan pada Mental Health Summary antar kelompok Comorbidities Status. Sehingga, asumsi homogenitas varians berhasil dipenuhi.
+
+```{r}
+# b) Diagnosis
+print("Nilai  Diagnosis - Mental Health Summary Levene's Test:")
+leveneTest(Mental_Health_Summary ~ Diagnosis, data = data)
+```
+Berdasarkan hasil uji Lavene's, ditemukan nilai p-value sebesar 0.1869 yang lebih dari 0.05. Hasil tersebut menunjukkan bahwa tidak terdapat perbedaan varians yang signifikan pada Mental Health Summary antar kelompok Diagnosis. Sehingga, asumsi homogenitas varians berhasil dipenuhi.
+
+```{r}
+# c) Frequency of Blood Transfusion
+print("Nilai  Frequency of Blood Transfusion - Mental Health Summary Levene's Test:")
+leveneTest(Mental_Health_Summary ~ Frequency_of_Blood_Transfusion, data = data)
+```
+Berdasarkan hasil uji Lavene's ditemukan bahwa terdapat nilai p-value sebesar 0.01375 yang kurang dari 0.05 pada variabel Frequency of Blood Transfusion sehingga menunjukkan bahwa terdapat perbedaan varians yang cukup signifikan antar kelompok. Hal ini menunjukkan bahwa asumsi homogenitas varians tidak terpenuhi pada variabel ini namun masih bisa ditoleransi pada analisis Mancova dikarenakan jumlah sampel yang cukup besar serta distribusi data yang relatif seimbang. Akan tetapi, hasil analisis perlu diinterpretasikan dengan lebih hati-hati.
+
+# - Physical Health Summary
+```{r}
+# a) Comorbidities Status
+print("Nilai Comordibities Status - Physical Health Summary Levene's Test:")
+leveneTest(Physical_Health_Summary ~ Comorbidities_Status, data = data)
+```
+Berdasarkan hasil uji Lavene's, didapatkan nilai p-value sebesar 0.118 yang lebih besar dari 0.05. Hal ini menunjukkan bahwa tidak terdapat perbedaan varians yang signifikan pada variabel Physical Helath Summary antar kelompok Comorbidities Status, sehingga asumsi homogenitas varians terpenuhi.
+
+```{r}
+# b) Diagnosis
+print("Nilai  Diagnosis - Physical Health Summary Levene's Test:")
+leveneTest(Physical_Health_Summary ~ Diagnosis, data = data)
+```
+Berdasarkan hasil uji Lavene's, didapatkan nilai p-value sebesar 0.2979 yang lebih besar dari 0.05. Hal ini menunjukkan bahwa tidak terdapat perbedaan varians yang signifikan pada variabel Physical Helath Summary antar kelompok Diagnosis, sehingga asumsi homogenitas varians terpenuhi.
+
+```{r}
+# c) Frequency of Blood Transfusion
+print("Nilai  Frequency of Blood Transfusion - Physical Health Summary Levene's Test:")
+leveneTest(Physical_Health_Summary ~ Frequency_of_Blood_Transfusion, data = data)
+# GAGAL di FREQ. TRANSFUSION (bisa diakalin)
+```
+Berdasarkan hasil uji Lavene's ditemukan bahwa terdapat nilai p-value sebesar 0.02648 yang kurang dari 0.05 pada variabel Frequency of Blood Transfusion sehingga menunjukkan bahwa terdapat perbedaan varians yang cukup signifikan antar kelompok. Hal ini menunjukkan bahwa asumsi homogenitas varians tidak terpenuhi pada variabel ini namun masih bisa ditoleransi pada analisis Mancova dikarenakan jumlah sampel yang cukup besar serta distribusi data yang relatif seimbang. Akan tetapi, hasil analisis perlu diinterpretasikan dengan lebih hati-hati.
+
+# 4. Uji Multikolinearitas Var. Dependen
+```{r}
+dv_var <- data[,c("Mental_Health_Summary", 
+                  "Physical_Health_Summary")]
+cor_y <- cor(dv_var, use = "complete.obs")
+print(cor_y)
+```
+Hasil uji multikolinearitas pada variabel dependen dilakukan dengan melihat nilai korelasi antara variabel Mental Health Summary dan Physical Health Summary. Hasil pengujian menunjukkan bahwa kedua variabel memiliki korelasi sebesar 0.819 yang menunjukkan korelasi yang kuat. 
+
+```{r}
+# - Uji dengan VIF karena Multikolinearitas Tinggi
+model_vif1 <- lm(Mental_Health_Summary ~ 
+                  Vitality + 
+                  Diagnosis + 
+                  Comorbidities_Status + 
+                  Frequency_of_Blood_Transfusion, 
+                data = data)
+```
+
+```{r}
+vif(model_vif1)
+model_vif2 <- lm(Physical_Health_Summary ~ 
+                   Vitality + 
+                   Diagnosis + 
+                   Comorbidities_Status + 
+                   Frequency_of_Blood_Transfusion, 
+                 data = data)
+vif(model_vif2)
+# BERHASIL 
+```
+Dikarenakan hasil uji multikolinearitas yang cukup tinggi, maka dilajukan uji Variance Inflation Factor (VIF) pada model. Hasil uji VIF menunjukkan bahwa seluruh variabel independen dan kovariat memiliki nilai GVIF^(1/(2*Df)) yang mendekati 1, yaitu sekitar 1.01 - 1.02. Hasil tersebut menunjukkan bahwa tidak terdapat gejala multikolinearitas yang signifikan dalam model. Oleh karena itu, dapat dipastikan bahwa model yang digunakan telah terbebas dari multikolinearitas dan telah memenuhi asumsi untuk analisis lanjutan.
+
+# 5. Uji Homogenitas Kemiringan Regresi
+# Cek untuk Mental Health
+```{r}
+slope_mental <- aov(Mental_Health_Summary ~ Vitality * Diagnosis * Frequency_of_Blood_Transfusion * Comorbidities_Status, data = data)
+summary(slope_mental)
+```
+Berdasarkan hasil uji Homogenitas kemiringan regresi pada Mental Health Summary, ditemukan bahwa variabel Vitality dan variabel independen (Diagnosis, Frequency of Blood Transfusion, dan Comorbidities Status) memiliki  nilai p-value yang lebih dari 0.05. 
+Vitality x Diagnosis = 0.1448
+Vitality x Frequency of Blood Transfusion = 0.2485
+Vitality x Comorbidities Status = 0.6295
+Hal ini menunjukkan bahwa tidak terdapat interkasi yang signifikan antara variabel vitality dan variabel independen, sehingga asumsi homogenitas kemiringan regresi terpenuhi dan analisis lanjutan dapat dilakukan.
+
+```{r}
+# Cek untuk Physical Health
+slope_physical <- aov(Physical_Health_Summary ~ Vitality * Diagnosis * Frequency_of_Blood_Transfusion * Comorbidities_Status, data = data)
+summary(slope_physical)
+# Slope = BERHASIL SEMUA
+```
+Berdasarkan hasil uji Homogenitas kemiringan regresi pada Physical Health Summary, ditemukan bahwa variabel Vitality dan variabel independen (Diagnosis, Frequency of Blood Transfusion, dan Comorbidities Status) memiliki  nilai p-value yang lebih dari 0.05.
+Vitality x Diagnosis = 0.6719
+Vitality x Frequency of Blood Transfusion = 0.4497
+Vitality x Comorbidities Status = 0.1659
+Hal ini menunjukkan bahwa variabel kovariat dengan variabel independen tidak memiliki interaksi yang signifikan dan bersifat konsisten pada setiap kelompok sehingga asumsi homogenitas kemiringan regresi dapat terpenuhi dan dapat dilanjutkan ke analisis berikutnya.
+
+# **ANALISIS ANOVA**
+```{r}
+# Mental Health Summary
+anova_mental <- aov(
+  Mental_Health_Summary ~
+    Diagnosis + Frequency_of_Blood_Transfusion + Comorbidities_Status,
+  data = data
+)
+summary(anova_mental)
+```
+Berdasarkan hasil uji ANOVA pada masing-masing variabel dependen, diperoleh hasil pada Mental Health Summary bahwa hanya variabel Comorbidities Status yang berpengaruh secara signifikan yang ditunjukkan oleh p-value sebesar 0.00576, sedangkan variabel diagnosis dan variabel frequency of blood transfusion tidak menunjukkan pengaruh yang signifikan dibuktikan oleh nilai p-value masing masing sebesar 0.14023 dan 0.27071.
+
+```{r}
+# Physical Health Summary
+anova_physical <- aov(
+  Physical_Health_Summary ~
+    Diagnosis + Frequency_of_Blood_Transfusion + Comorbidities_Status,
+  data = data
+)
+summary(anova_physical)
+```
+Berdasarkan hasil uji ANOVA pada masing-masing variabel dependen, diperoleh hasil pada Physical Health Summary bahwa hanya variabel Comorbidities Status yang berpengaruh secara signifikan yang ditunjukkan oleh p-value sebesar 0.000189, sedangkan variabel diagnosis dan variabel frequency of blood transfusion tidak menunjukkan pengaruh yang signifikan dibuktikan oleh nilai p-value masing masing sebesar 0.189197 dan 0.205051.
+
+# **ANALISIS MANOVA**
+```{r}
+manova_model <- manova(
+  cbind(Mental_Health_Summary, Physical_Health_Summary) ~
+    Diagnosis + Frequency_of_Blood_Transfusion + Comorbidities_Status,
+  data = data
+)
+```
+
+```{r}
+summary(manova_model, test = "Pillai")
+```
+Hasil uji Manova dengan menggunakan pendekatan Pillai's Trace menunjukkan hasil uji dimana hanya variabel Comorbidities yang memiliki pengaruh signifikan secara simultan terhadap kedua variabel dependen yang ditunjukkan oleh nilai p-value sebesar 0.003669. Sementara itu variabel diagnosis dan frequency of blood transfusion tidak menunjukkan pengaruh yang signifikan secara multivariat yang dibuktikan oleh niilai p-value maisng-masing variabel sebesar 0.416719. 
+Hal ini mengindikasikan bahwa hanya variabel Comorbidities Status yang memiliki peran penting dalam memengaruhi kondisi kesehatan mental dan fisik pasien Thalassemia di Bangladesh secara keseluruhan.
+
+# **ANALISIS MANCOVA**
+```{r}
+mancova_model <- manova(
+  cbind(Mental_Health_Summary, Physical_Health_Summary) ~
+    Diagnosis + Frequency_of_Blood_Transfusion + Comorbidities_Status + Vitality,
+  data = data
+)
+```
+
+```{r}
+summary(mancova_model, test = "Pillai")
+```
+Berdasarkan hasil uji Mancova dengan pendekatan Pillai's Trace, diperoleh hasil yang emnunjukkan bahwa seluruh variabel independen dan kovariat memiliki pengaruh yang signifikan secara simultas terhadap variabel dependen. Variabel Comorbidities Status memiliki pengaruh yang sangat signifikan yang ditunjukkan oleh nilai p-value sebesar 1.438e-09, variabel diagnosis yang menunjukkan pengaruh signifikan dengan nilai p-value sebesar 0.01162 dan variabel Frequency of blood transfusion yang juga signifikan ditunjukkan oleh nilai p-value sebesar 0.03027.
+
+Selain itu, variabel kovariat vitality juga memiliki pengaruh yang sangat signifiakan terhadap kedua variabel dependen yang ditunjukkan oleh nilai p-value sebesar < 2,2e-16. Hasil tersebut menunjukkan bahwa setelah mengontrol variabel kovariat seluruh variabel independen dapat memberikan kontribusi yang signifikan terhadap kondisi kesehatan mental dan fisik pasien Thalassemia di Bangladesh.
+
+```{r}
+summary.aov(mancova_model)
+```
+Berdasarkan hasil uji lanjutan Anova univariat dari analisis Mancova, ditemukan hasil bahwa kedua variabel dependen Mental health summary dan Physical heatlh summary dengan seluruh variabel independen yang digunakan yaitu Diagnsis, Frequency of Blood transfusion, dan Comorbidities Status memberikan pengaruh yang signifikan. 
+Pada mental health summary, variabel diagnosis memiliki nilai p-value sebesar 0.005464, variabel Frequency f Blood transfusion menunjukkan nilai p-value sebesar 0.028315, dan variabel Comorbidities Status menunjukkan nilai p-value sebesar 1.174e-06. Sementara itu, pada Physical health summary masing masing variabel menunjukkan nilai p-value sebesar 0.006281, 0.007877, dan 3.045e-11. 
+Variabel Vitality sebagai kovariat juga menunjukkan pengaruh yang snagat signifikan pada kedua variabel dependen yang ditunjukkan oleh nilai p-value sebesar <2.2e-16. Sehingga dpaat disimpulkan bahwa setelah mengontrol variabel kovariat seluruh variabel independen dapat memberikan kontribusi yang signifikan terhadap kondisi kesehatan mental dan fisik pasien Thalassemia di Bangladesh.
